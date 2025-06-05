@@ -49,20 +49,38 @@ impl FFIResult {
         }
     }
 }
+#[repr(C)]
+pub struct FFIIdentity {
+    pub bytes: [u8; 32],
+}
 
 /// Player data that's safe to pass across FFI
 #[repr(C)]
 pub struct FFIPlayer {
-    pub identity_bytes: [u8; 32], // Identity serialized as bytes
+    pub identity: FFIIdentity,
     pub username: *mut c_char,
     pub position_x: f32,
     pub position_y: f32,
     pub position_z: f32,
     pub rotation_yaw: f32,
     pub level: u32,
+    pub experience: u64,
     pub health: f32,
     pub max_health: f32,
     pub is_online: bool,
+    pub current_zone: *mut c_char,
+}
+
+impl From<Identity> for FFIIdentity {
+    fn from(identity: Identity) -> Self {
+        // Convert Identity to bytes representation
+        let mut bytes = [0u8; 32];
+        let identity_str = format!("{:?}", identity);
+        let identity_bytes = identity_str.as_bytes();
+        let copy_len = identity_bytes.len().min(32);
+        bytes[..copy_len].copy_from_slice(&identity_bytes[..copy_len]);
+        FFIIdentity { bytes }
+    }
 }
 
 /// Chat message that's safe to pass across FFI
