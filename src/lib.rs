@@ -1,6 +1,14 @@
 // server/src/lib.rs
 use spacetimedb::{table, reducer, Identity, Timestamp, ReducerContext, ConnectionId, Table};
 
+// Re-export bridge modules
+pub mod bridge;
+pub use bridge::*;
+
+// Include generated code if it exists
+#[cfg(feature = "generated")]
+include!(concat!(env!("OUT_DIR"), "/generated.rs"));
+
 /// User account information
 /// This table stores persistent user data that survives across sessions
 #[derive(Clone, Debug)]

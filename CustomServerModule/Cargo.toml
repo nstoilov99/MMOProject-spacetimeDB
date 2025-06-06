@@ -1,0 +1,22 @@
+# CustomServerModule/Cargo.toml
+[package]
+name = "custom_server_module"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib"]  # Also needs to be a SpacetimeDB module
+
+[dependencies]
+# Workspace dependencies
+spacetimedb = { workspace = true }
+serde = { workspace = true }
+log = { workspace = true }
+
+# Dependencies on our other modules
+shared_module = { path = "../SharedModule" }
+server_module = { path = "../ServerModule" }
+
+# Game-specific dependencies for your MMO features
+noise = "0.8"            # For procedural world generation
+pathfinding = "4.0"      # For AI navigation and routing

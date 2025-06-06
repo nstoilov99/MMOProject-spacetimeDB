@@ -1,0 +1,14 @@
+# SharedModule/Cargo.toml
+[package]
+name = "shared_module"
+version.workspace = true    # Use the version defined in workspace
+edition.workspace = true    # Use the edition defined in workspace
+
+[dependencies]
+# Only include the workspace dependencies this module actually needs
+spacetimedb = { workspace = true }
+serde = { workspace = true }
+log = { workspace = true }
+
+# Module-specific dependencies that others don't need
+uuid = { version = "1.0", features = ["v4", "serde"] }

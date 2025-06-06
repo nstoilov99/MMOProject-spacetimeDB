@@ -1,9 +1,7 @@
 // server/src/bridge/ffi.rs
 use super::types::*;
-use crate::*;
-use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_void};
-use spacetimedb::{Identity, Address};
+use std::ffi::{CString};
+use std::os::raw::{c_char};
 
 /// Initialize connection to SpacetimeDB
 /// This function establishes the connection from the Unreal client

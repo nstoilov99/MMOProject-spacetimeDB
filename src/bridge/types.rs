@@ -1,6 +1,7 @@
 // server/src/bridge/types.rs
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};
+use spacetimedb::Identity;
 
 /// Result type that's safe to pass across FFI boundary
 /// C++ doesn't understand Rust's Result type, so we create our own

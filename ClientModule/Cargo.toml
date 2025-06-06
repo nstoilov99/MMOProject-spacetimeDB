@@ -1,0 +1,32 @@
+# ClientModule/Cargo.toml
+[package]
+name = "client_module"
+version.workspace = true
+edition.workspace = true
+
+# Compile as both a regular library and a dynamic library
+# The dynamic library is what Unreal Engine will load
+[lib]
+crate-type = ["lib", "cdylib"]
+
+[dependencies]
+# Workspace dependencies
+spacetimedb = { workspace = true }
+serde = { workspace = true }
+log = { workspace = true }
+
+# Dependency on SharedModule for common types
+shared_module = { path = "../SharedModule" }
+
+# Client-specific dependencies for FFI and networking
+libc = "0.2"             # For C-compatible types in FFI functions
+tokio = { version = "1.0", features = ["full"] }  # For async operations
+parking_lot = "0.12"     # For efficient thread synchronization
+
+# Optional dependencies for advanced features
+tungstenite = { version = "0.20", optional = true }  # WebSocket support
+
+# Feature flags allow conditional compilation
+[features]
+default = []
+websocket = ["tungstenite"]
