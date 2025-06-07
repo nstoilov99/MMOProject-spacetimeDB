@@ -1,7 +1,9 @@
-// server/src/modules/auth.rs
-use crate::*;
+//! Authentication reducers
+
+use spacetimedb::{reducer, ReducerContext};
+use shared_module::*;
+use crate::tables::*;
 use sha2::{Sha256, Digest};
-use spacetimedb::{reducer, ReducerContext, Identity, Timestamp};
 
 /// WASM-compatible password hashing using SHA256
 fn hash_password(password: &str, salt: &str) -> String {
@@ -21,7 +23,7 @@ fn verify_password(password: &str, stored_hash: &str, salt: &str) -> bool {
 }
 
 /// Generate a salt using the user's identity and current timestamp
-fn generate_salt(identity: &Identity, timestamp: Timestamp) -> String {
+fn generate_salt(identity: &spacetimedb::Identity, timestamp: spacetimedb::Timestamp) -> String {
     let mut hasher = Sha256::new();
     
     // Use string representations for hashing since direct byte access isn't available
@@ -45,34 +47,17 @@ pub fn register_user(
     password: String,
     email: Option<String>
 ) -> Result<(), String> {
-    // Input validation
-    if username.trim().is_empty() {
-        return Err("Username cannot be empty".to_string());
-    }
+    // Input validation using shared utilities
+    validate_username(&username)?;
+    validate_password(&password)?;
     
-    if username.len() < 3 || username.len() > 20 {
-        return Err("Username must be between 3 and 20 characters".to_string());
-    }
-    
-    // Check for valid username characters (alphanumeric and underscore only)
-    if !username.chars().all(|c| c.is_alphanumeric() || c == '_') {
-        return Err("Username can only contain letters, numbers, and underscores".to_string());
-    }
-    
-    if password.len() < 8 {
-        return Err("Password must be at least 8 characters long".to_string());
+    if let Some(ref email_addr) = email {
+        validate_email(email_addr)?;
     }
     
     // Check if username is already taken
     if User::filter_by_username(ctx, &username).is_some() {
         return Err("Username is already taken".to_string());
-    }
-    
-    // Validate email format if provided
-    if let Some(ref email_addr) = email {
-        if !email_addr.contains('@') || !email_addr.contains('.') {
-            return Err("Invalid email format".to_string());
-        }
     }
     
     // Generate salt and hash password
@@ -119,32 +104,25 @@ pub fn login_user(
     }
     
     // Update last login time
-    let mut updated_user = user;
-    updated_user.last_login = ctx.timestamp;
-    ctx.db.user().identity().update(updated_user);
+    User::update_last_login(ctx, &ctx.sender, ctx.timestamp);
     
     // Get client IP (placeholder since detailed connection info isn't available)
     let client_ip = "unknown".to_string();
     
     // Create or update game session
-    if let Some(session) = GameSession::filter_by_identity(ctx, &ctx.sender) {
+    if GameSession::filter_by_identity(ctx, &ctx.sender).is_some() {
         // Update existing session
-        let mut updated_session = session;
-        updated_session.connection_id = ctx.connection_id;
-        updated_session.last_activity = ctx.timestamp;
-        updated_session.client_version = client_version;
-        updated_session.ip_address = client_ip;
-        ctx.db.gamesession().identity().update(updated_session);
+        GameSession::update_activity(ctx, &ctx.sender, ctx.timestamp);
     } else {
         // Create new session
-        ctx.db.gamesession().insert(GameSession {
-            identity: ctx.sender,
-            connection_id: ctx.connection_id,
-            login_time: ctx.timestamp,
-            last_activity: ctx.timestamp,
+        GameSession::create_session(
+            ctx,
+            ctx.sender,
+            Some(ctx.connection_id),
             client_version,
-            ip_address: client_ip,
-        });
+            client_ip,
+            ctx.timestamp
+        );
     }
     
     log::info!("User logged in: {}", username);
@@ -155,15 +133,10 @@ pub fn login_user(
 #[reducer]
 pub fn logout_user(ctx: &ReducerContext) -> Result<(), String> {
     // Remove the game session
-    ctx.db.gamesession().identity().delete(&ctx.sender);
+    GameSession::remove_session(ctx, &ctx.sender);
     
     // Mark player as offline if they exist
-    if let Some(player) = Player::filter_by_identity(ctx, &ctx.sender) {
-        let mut updated_player = player;
-        updated_player.is_online = false;
-        updated_player.last_seen = ctx.timestamp;
-        ctx.db.game_players().identity().update(updated_player);
-    }
+    Player::set_online_status(ctx, &ctx.sender, false, ctx.timestamp);
     
     log::info!("User logged out: {:?}", ctx.sender);
     Ok(())

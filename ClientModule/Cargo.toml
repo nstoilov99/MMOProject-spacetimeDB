@@ -5,7 +5,6 @@ version.workspace = true
 edition.workspace = true
 
 # Compile as both a regular library and a dynamic library
-# The dynamic library is what Unreal Engine will load
 [lib]
 crate-type = ["lib", "cdylib"]
 
@@ -20,8 +19,8 @@ shared_module = { path = "../SharedModule" }
 
 # Client-specific dependencies for FFI and networking
 libc = "0.2"             # For C-compatible types in FFI functions
-tokio = { version = "1.0", features = ["full"] }  # For async operations
-parking_lot = "0.12"     # For efficient thread synchronization
+parking_lot = { workspace = true }     # For efficient thread synchronization
+lazy_static = { workspace = true }      # For global state management
 
 # Optional dependencies for advanced features
 tungstenite = { version = "0.20", optional = true }  # WebSocket support

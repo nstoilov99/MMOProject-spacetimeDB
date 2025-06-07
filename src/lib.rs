@@ -1,243 +1,121 @@
-// server/src/lib.rs
-use spacetimedb::{table, reducer, Identity, Timestamp, ReducerContext, ConnectionId, Table};
+//! SpacetimeDB MMO Template - Main Integration Module
+//! 
+//! This is the main entry point that brings together all the modules
+//! and provides a unified interface for both SpacetimeDB and FFI clients.
 
-// Re-export bridge modules
-pub mod bridge;
-pub use bridge::*;
+// Re-export all modules for easy access
+pub use shared_module;
 
-// Include generated code if it exists
-#[cfg(feature = "generated")]
-include!(concat!(env!("OUT_DIR"), "/generated.rs"));
+#[cfg(feature = "server")]
+pub use server_module;
 
-/// User account information
-/// This table stores persistent user data that survives across sessions
-#[derive(Clone, Debug)]
-#[table(name = user, public)]
-pub struct User {
-    /// Unique identifier for this user - this is their permanent ID
-    #[primary_key]
-    pub identity: Identity,
-    
-    /// Display name chosen by the user
-    #[unique]
-    pub username: String,
-    
-    /// Hashed password (never store passwords in plain text!)
-    pub password_hash: String,
-    
-    /// Salt used for password hashing
-    pub password_salt: String,
-    
-    /// Email address for account recovery
-    pub email: Option<String>,
-    
-    /// When this account was created
-    pub created_at: Timestamp,
-    
-    /// When the user last logged in
-    pub last_login: Timestamp,
-    
-    /// Whether this account is currently active
-    pub is_active: bool,
+#[cfg(feature = "client")]
+pub use client_module;
+
+#[cfg(feature = "server")]
+pub use custom_server_module;
+
+// Bridge modules for FFI
+#[cfg(feature = "client")]
+pub mod bridge {
+    pub use client_module::bridge::*;
 }
 
-/// Active player in the game world
-/// This represents a player who is currently online and in the game
-#[derive(Clone, Debug)]
-#[table(name = game_players, public)]
-pub struct Player {
-    /// Links to the User table - this is the same as User.identity
-    #[primary_key]
-    pub identity: Identity,
-    
-    /// Display name (copied from User for quick access)
-    pub username: String,
-    
-    /// Player's position in 3D space
-    pub position_x: f32,
-    pub position_y: f32,
-    pub position_z: f32,
-    
-    /// Player's rotation (yaw angle in degrees)
-    pub rotation_yaw: f32,
-    
-    /// Game-specific stats
-    pub level: u32,
-    pub experience: u64,
-    pub health: f32,
-    pub max_health: f32,
-    
-    /// Online status
-    pub is_online: bool,
-    pub last_seen: Timestamp,
-    
-    /// Current zone or area
-    pub current_zone: String,
+// FFI exports for Unreal Engine
+#[cfg(feature = "client")]
+pub mod ffi {
+    pub use client_module::ffi::*;
 }
 
-/// Chat message storage
-/// We store recent chat messages for players who join mid-conversation
-#[derive(Clone, Debug)]
-#[table(name = chatmessage, public)]
-pub struct ChatMessage {
-    /// Unique message ID
-    #[primary_key]
-    pub message_id: u64,
-    
-    /// Who sent this message
-    pub sender_identity: Identity,
-    pub sender_username: String,
-    
-    /// The actual message content
-    pub message: String,
-    
-    /// Chat channel (global, guild, whisper, etc.)
-    pub channel: String,
-    
-    /// When this message was sent
-    pub timestamp: Timestamp,
+// Server exports for SpacetimeDB
+#[cfg(feature = "server")]
+pub mod server {
+    pub use server_module::*;
+    pub use custom_server_module::*;
 }
 
-/// Active game sessions
-/// Tracks who is currently connected for cleanup and management
-#[derive(Clone, Debug)]
-#[table(name = gamesession, public)]
-pub struct GameSession {
-    /// User's identity
-    #[primary_key]
-    pub identity: Identity,
-    
-    /// Connection ID (if available)
-    pub connection_id: Option<ConnectionId>,
-    
-    /// When they connected
-    pub login_time: Timestamp,
-    
-    /// Last activity timestamp (for timeout detection)
-    pub last_activity: Timestamp,
-    
-    /// Connection metadata
-    pub client_version: String,
-    pub ip_address: String,
-}
+// Conditional compilation based on target
+#[cfg(feature = "server")]
+pub use server_module::*;
+#[cfg(feature = "server")]
+pub use custom_server_module::*;
 
-/// Called when the SpacetimeDB module starts
-#[reducer(init)]
-pub fn init(_ctx: &ReducerContext) {
-    log::info!("MMO Server initializing...");
-    log::info!("MMO Server initialized successfully");
-}
-
-/// Called when a client connects
-#[reducer(client_connected)]
-pub fn on_connect(ctx: &ReducerContext) {
-    log::info!("Client connected: {:?}", ctx.sender);
-}
-
-/// Called when a client disconnects
-#[reducer(client_disconnected)]
-pub fn on_disconnect(ctx: &ReducerContext) {
-    log::info!("Client disconnected: {:?}", ctx.sender);
+/// Initialize the entire MMO system
+/// This function sets up all subsystems and prepares the environment
+pub fn initialize_mmo_system() -> Result<(), String> {
+    // Initialize logging
+    env_logger::init();
     
-    // Cleanup player state when they disconnect
-    if let Some(player) = ctx.db.game_players().identity().find(&ctx.sender) {
-        let mut updated_player = player.clone();
-        updated_player.is_online = false;
-        updated_player.last_seen = ctx.timestamp;
-        ctx.db.game_players().identity().update(updated_player);
+    log::info!("Initializing SpacetimeDB MMO Template...");
+    
+    // Initialize client module (for FFI builds)
+    #[cfg(feature = "client")]
+    {
+        client_module::initialize_client();
+        log::info!("Client module initialized");
     }
     
-    // Remove their game session
-    ctx.db.gamesession().identity().delete(&ctx.sender);
-}
-
-/// Periodic cleanup of inactive sessions
-/// This should be called regularly to remove stale sessions and mark players offline
-#[reducer]
-pub fn cleanup_inactive_sessions(ctx: &ReducerContext) -> Result<(), String> {
-    let timeout_seconds = 300; // 5 minutes
-    let cutoff_time = ctx.timestamp - std::time::Duration::from_secs(timeout_seconds);
-    
-    let mut cleaned_count = 0;
-    
-    // Find sessions that haven't been active recently
-    let inactive_sessions: Vec<GameSession> = ctx.db.gamesession().iter()
-        .filter(|session| session.last_activity < cutoff_time)
-        .collect();
-    
-    for session in inactive_sessions {
-        // Mark associated player as offline
-        if let Some(player) = ctx.db.game_players().identity().find(&session.identity) {
-            let mut updated_player = player.clone();
-            updated_player.is_online = false;
-            updated_player.last_seen = ctx.timestamp;
-            ctx.db.game_players().identity().update(updated_player);
-        }
-        
-        // Remove the expired session
-        ctx.db.gamesession().identity().delete(&session.identity);
-        cleaned_count += 1;
-    }
-    
-    if cleaned_count > 0 {
-        log::info!("Cleaned up {} inactive sessions", cleaned_count);
-    }
-    
+    log::info!("SpacetimeDB MMO Template initialized successfully");
     Ok(())
 }
 
-// Module organization - files are in modules/ folder but re-exported at top level
-mod modules {
-    pub mod auth;
-    pub mod player;
-    pub mod chat;
+/// Get version information
+pub fn get_version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
 }
 
-pub use modules::auth;
-pub use modules::player;
-pub use modules::chat;
-
-// Helper functions for common database queries
-impl User {
-    pub fn filter_by_username(ctx: &ReducerContext, username: &str) -> Option<User> {
-        ctx.db.user().iter().find(|user| user.username == username)
-    }
-    
-    pub fn filter_by_identity(ctx: &ReducerContext, identity: &Identity) -> Option<User> {
-        if let Some(user) = ctx.db.user().identity().find(identity) {
-            Some(user.clone())
-        } else {
-            None
-        }
+/// Get build information
+pub fn get_build_info() -> BuildInfo {
+    BuildInfo {
+        version: get_version(),
+        build_date: env!("BUILD_DATE"),
+        git_hash: env!("GIT_HASH"),
+        target: std::env::consts::TARGET,
+        profile: if cfg!(debug_assertions) { "debug" } else { "release" },
     }
 }
 
-impl Player {
-    pub fn get_online_players(ctx: &ReducerContext) -> Vec<Player> {
-        ctx.db.game_players().iter().filter(|p| p.is_online).collect()
-    }
-    
-    pub fn get_players_in_zone(ctx: &ReducerContext, zone: &str) -> Vec<Player> {
-        ctx.db.game_players().iter()
-            .filter(|p| p.is_online && p.current_zone == zone)
-            .collect()
-    }
-    
-    pub fn filter_by_identity(ctx: &ReducerContext, identity: &Identity) -> Option<Player> {
-        if let Some(player) = ctx.db.game_players().identity().find(identity) {
-            Some(player.clone())
-        } else {
-            None
-        }
-    }
+/// Build information structure
+#[derive(Debug, Clone)]
+pub struct BuildInfo {
+    pub version: &'static str,
+    pub build_date: &'static str,
+    pub git_hash: &'static str,
+    pub target: &'static str,
+    pub profile: &'static str,
 }
 
-impl GameSession {
-    pub fn filter_by_identity(ctx: &ReducerContext, identity: &Identity) -> Option<GameSession> {
-        if let Some(session) = ctx.db.gamesession().identity().find(identity) {
-            Some(session.clone())
-        } else {
-            None
-        }
+// Feature-gated exports for different build types
+#[cfg(feature = "client")]
+pub mod client_exports {
+    pub use crate::client_module::*;
+    #[cfg(feature = "client")]
+    pub use crate::ffi::*;
+}
+
+#[cfg(feature = "server")]
+pub mod server_exports {
+    pub use crate::server_module::*;
+    pub use crate::custom_server_module::*;
+}
+
+// Test module for integration testing
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_initialization() {
+        assert!(initialize_mmo_system().is_ok());
+    }
+    
+    #[test]
+    fn test_version_info() {
+        let version = get_version();
+        assert!(!version.is_empty());
+        
+        let build_info = get_build_info();
+        assert!(!build_info.version.is_empty());
+        assert!(!build_info.target.is_empty());
     }
 }

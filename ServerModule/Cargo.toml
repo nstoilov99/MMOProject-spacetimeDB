@@ -19,6 +19,9 @@ log = { workspace = true }
 shared_module = { path = "../SharedModule" }
 
 # Server-specific dependencies that other modules don't need
-bcrypt = "0.15"          # For secure password hashing
+sha2 = { workspace = true }
 rand = "0.8"             # For generating random values
-chrono = { version = "0.4", features = ["serde"] }  # For timestamp handling
+
+# Feature flags
+[features]
+default = []

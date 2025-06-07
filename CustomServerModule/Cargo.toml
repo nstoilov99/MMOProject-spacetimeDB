@@ -20,3 +20,7 @@ server_module = { path = "../ServerModule" }
 # Game-specific dependencies for your MMO features
 noise = "0.8"            # For procedural world generation
 pathfinding = "4.0"      # For AI navigation and routing
+
+# Feature flags
+[features]
+default = []

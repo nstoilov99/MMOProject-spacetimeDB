@@ -1,13 +1,17 @@
 [package]
-name = "spacetime-module"
-version = "0.1.0"
-edition = "2021"
+name = "spacetime-mmo-template"
+version.workspace = true
+edition.workspace = true
+description = "A complete MMO template using SpacetimeDB and Unreal Engine"
+license.workspace = true
+repository.workspace = true
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
+# Library configuration
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "lib"]
+name = "spacetime_mmo_template"
 
+# Workspace configuration
 [workspace]
 members = [
     "SharedModule",
@@ -16,27 +20,74 @@ members = [
     "CustomServerModule",
 ]
 
+# Workspace package configuration - inherited by all members
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/your-username/spacetime-mmo-template"
+
+# Workspace dependencies - shared across all modules
 [workspace.dependencies]
 spacetimedb = "1.1.2"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 sha2 = "0.10"
-
-# For FFI
 libc = "0.2"
+parking_lot = "0.12"
+lazy_static = "1.4"
+env_logger = "0.10"
 
+# Dependencies for the main crate
+[dependencies]
+# Local workspace modules
+shared_module = { path = "SharedModule" }
+server_module = { path = "ServerModule" }
+client_module = { path = "ClientModule" }
+custom_server_module = { path = "CustomServerModule" }
+
+# External dependencies
+spacetimedb = { workspace = true }
+serde = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+
+# Build dependencies
 [build-dependencies]
 cbindgen = "0.24"
+chrono = "0.4"
 
+# Binary targets
 [[bin]]
 name = "generate_bindings"
 path = "src/bin/generate_bindings.rs"
 
-[features]
-default = ["spacetimedb-build"]
-spacetimedb-build = []
+[[bin]]
+name = "server_tools"
+path = "src/bin/server_tools.rs"
 
-# Optimize for release builds
+# Feature flags for conditional compilation
+[features]
+default = ["client", "server"]
+
+# Client features (for Unreal Engine integration)
+client = [
+    "client_module/default",
+    "shared_module/default"
+]
+
+# Server features (for SpacetimeDB modules)
+server = [
+    "server_module/default", 
+    "custom_server_module/default",
+    "shared_module/default"
+]
+
+# Development features
+dev-tools = ["server", "client"]
+debug-logging = []
+
+# Release optimization profiles
 [profile.release]
 opt-level = 3
 lto = true
@@ -44,8 +95,20 @@ codegen-units = 1
 panic = "abort"
 strip = true
 
-# Development builds with debug info
+# Development profile with debug info
 [profile.dev]
 opt-level = 0
 debug = true
+overflow-checks = true
 
+# Example configuration
+[package.metadata.example]
+unreal_project_path = "../UnrealProject"
+spacetimedb_host = "localhost"
+spacetimedb_port = 3000
+database_name = "mmo_database"
+
+# Documentation configuration
+[package.metadata.docs.rs]
+features = ["dev-tools"]
+rustdoc-args = ["--cfg", "docsrs"]

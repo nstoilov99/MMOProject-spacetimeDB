@@ -5,11 +5,9 @@
 //! of your game can call each other to request actions.
 
 use serde::{Deserialize, Serialize};
-use crate::ObjectId;
+use crate::types::ObjectId;
 
 /// Represents a function call from one part of the system to another
-/// This is like a detailed phone message that includes not just
-/// what function to call, but also all the information needed to call it
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RpcCall {
     pub function_name: String,
